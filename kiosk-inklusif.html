@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kiosk Inklusif · Smart Mall Navigator</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<style>
+  /* ============ TOKENS ============ */
+  :root{
+    --bg-1:#eaf3f4;
+    --bg-2:#eef2fb;
+    --card:#ffffff;
+    --ink:#20303a;
+    --ink-soft:#4c6169;
+    --teal:#2f9c95;
+    --teal-deep:#1f716c;
+    --coral:#ff8a65;
+    --coral-deep:#e8663c;
+    --ok:#4caf93;
+    --ring:#bfe3df;
+    --radius-lg:28px;
+    --radius-md:18px;
+    --shadow:0 14px 34px rgba(31,72,74,0.14);
+    --focus:0 0 0 4px rgba(47,156,149,0.35);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    min-height:100vh;
+    font-family:'Inter',system-ui,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(circle at 15% 10%, #f6fbfa 0%, transparent 45%),
+      radial-gradient(circle at 90% 85%, #f2f0fb 0%, transparent 50%),
+      linear-gradient(160deg, var(--bg-1), var(--bg-2));
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+  }
+
+  h1,h2{font-family:'Quicksand',sans-serif;}
+
+  /* focus visibility for keyboard users */
+  button:focus-visible, [tabindex]:focus-visible{
+    outline:none;
+    box-shadow:var(--focus);
+  }
+
+  /* ============ SPLASH / ADMIN ============ */
+  #layar-admin{
+    position:fixed; inset:0; z-index:100;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:28px;
+    background:linear-gradient(160deg,#dff1ef,#e7ecfa);
+    text-align:center; padding:24px;
+  }
+  .splash-badge{
+    width:96px; height:96px; border-radius:50%;
+    background:var(--card); box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center; font-size:44px;
+  }
+  #layar-admin h2{font-size:1.9rem; color:var(--teal-deep); font-weight:700;}
+  #layar-admin p{color:var(--ink-soft); font-size:1.1rem; max-width:480px; line-height:1.5;}
+  #btn-admin{
+    padding:22px 48px; font-size:1.5rem; font-weight:700; font-family:'Quicksand',sans-serif;
+    background:linear-gradient(135deg,var(--teal),var(--teal-deep));
+    color:#fff; border:none; border-radius:100px; cursor:pointer;
+    box-shadow:0 12px 28px rgba(47,156,149,0.35);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  #btn-admin:hover{transform:translateY(-2px) scale(1.02); box-shadow:0 16px 34px rgba(47,156,149,0.42);}
+  #btn-admin:active{transform:translateY(0) scale(0.99);}
+
+  /* ============ MAIN STAGE ============ */
+  .panggung{
+    width:min(920px, 92vw);
+    display:flex; flex-direction:column; align-items:center; gap:22px;
+    z-index:5;
+  }
+  .eyebrow{
+    font-family:'Quicksand',sans-serif; font-weight:600; letter-spacing:.08em;
+    text-transform:uppercase; font-size:.85rem; color:var(--teal-deep);
+    background:rgba(47,156,149,0.12); padding:6px 16px; border-radius:100px;
+  }
+  h1{
+    font-size:clamp(1.9rem, 4vw, 2.9rem); font-weight:700; color:var(--ink);
+    margin:0; text-align:center;
+  }
+
+  #output-text{
+    width:100%;
+    font-size:clamp(1.2rem, 2.4vw, 1.6rem); font-weight:400; line-height:1.55;
+    min-height:140px;
+    background:var(--card); color:var(--ink);
+    padding:34px 38px; border-radius:var(--radius-lg);
+    box-shadow:var(--shadow);
+    border:1px solid rgba(47,156,149,0.15);
+    position:relative;
+  }
+  #output-text b{color:var(--teal-deep);}
+  #output-text small{color:var(--coral-deep);}
+
+  #status-mic{
+    display:none; align-items:center; gap:12px;
+    font-family:'Quicksand',sans-serif; font-weight:600; font-size:1.05rem; color:var(--teal-deep);
+  }
+  .pulse-wrap{position:relative; width:20px; height:20px;}
+  .pulse-dot{
+    width:20px; height:20px; border-radius:50%; background:var(--ok);
+  }
+  .pulse-ring{
+    position:absolute; inset:0; border-radius:50%; background:var(--ok);
+    opacity:.55; animation:denyut 1.6s ease-out infinite;
+  }
+  @keyframes denyut{
+    0%{transform:scale(1); opacity:.55;}
+    100%{transform:scale(2.6); opacity:0;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .pulse-ring{animation:none; display:none;}
+  }
+
+  /* ============ CAMERA HUD ============ */
+  .kamera-container{
+    position:fixed; bottom:28px; right:28px;
+    width:220px; height:170px;
+    background:var(--card); border-radius:var(--radius-md);
+    border:3px solid var(--coral);
+    box-shadow:var(--shadow);
+    overflow:hidden; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .2s ease, box-shadow .2s ease;
+    z-index:20;
+  }
+  .kamera-container:hover, .kamera-container:focus-visible{
+    transform:scale(1.04);
+    box-shadow:0 18px 40px rgba(232,102,60,0.3);
+  }
+  .kamera-container .isi-kamera{
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    color:var(--coral-deep); text-align:center; padding:12px; pointer-events:none;
+  }
+  .kamera-container .isi-kamera .ikon{font-size:2rem;}
+  .kamera-container .isi-kamera p{
+    font-family:'Quicksand',sans-serif; font-weight:700; font-size:.95rem; margin:0; line-height:1.3;
+  }
+  .kamera-container canvas{width:100%; height:100%; object-fit:cover; display:none;}
+
+  .footer-hint{
+    color:var(--ink-soft); font-size:.95rem; text-align:center; max-width:640px;
+  }
+
+  @media (max-width: 640px){
+    .kamera-container{width:140px; height:110px; bottom:16px; right:16px;}
+    .kamera-container .ikon{font-size:1.4rem;}
+    .kamera-container p{font-size:.75rem;}
+    #output-text{padding:24px 22px;}
+  }
+</style>
+</head>
+<body>
+
+  <!-- SPLASH / ADMIN START SCREEN -->
+  <div id="layar-admin" role="dialog" aria-label="Layar mulai kiosk">
+    <div class="splash-badge" aria-hidden="true">♿</div>
+    <h2>Kiosk Navigasi Inklusif</h2>
+    <p>Sistem ini bisa digunakan dengan suara (untuk pengunjung tunanetra) atau bahasa isyarat lewat kamera (untuk pengunjung tunarungu/tunawicara).</p>
+    <button id="btn-admin">Ketuk untuk mengaktifkan kiosk</button>
+  </div>
+
+  <!-- MAIN STAGE -->
+  <main class="panggung">
+    <span class="eyebrow">Mall Navigator</span>
+    <h1>Ada yang bisa dibantu?</h1>
+
+    <div id="output-text" aria-live="polite">
+      Sistem siap. Silakan berbicara langsung (contoh: <b>"Di mana toilet?"</b>).<br><br>
+      Atau ketuk kotak kamera di sudut kanan bawah untuk mode bahasa isyarat.
+    </div>
+
+    <div id="status-mic">
+      <span class="pulse-wrap"><span class="pulse-ring"></span><span class="pulse-dot"></span></span>
+      Mendengarkan suara Anda…
+    </div>
+
+    <p class="footer-hint">Kata kunci yang dikenali: toilet, makan, sakit, sholat, atm, parkir, keluar, tolong.</p>
+  </main>
+
+  <!-- CAMERA HUD -->
+  <div class="kamera-container" id="area-kamera" role="button" tabindex="0"
+       aria-label="Aktifkan mode bahasa isyarat dengan kamera">
+    <div class="isi-kamera" id="isi-kamera">
+      <span class="ikon" aria-hidden="true">🤟</span>
+      <p>Ketuk untuk<br>Bahasa Isyarat</p>
+    </div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ==========================================
+  // 1. LINK MODEL TEACHABLE MACHINE
+  // ==========================================
+  // Pastikan diakhiri garis miring "/", contoh: "https://teachablemachine.withgoogle.com/models/xyz123/"
+  const URL_MODEL_AI = "https://teachablemachine.withgoogle.com/models/Tw9PXPrR5/";
+
+  // ==========================================
+  // 2. DATABASE RUANGAN
+  // Kunci di sini HARUS sama persis (huruf kecil) dengan nama kelas
+  // di project Teachable Machine kamu, supaya isyarat terhubung ke jawaban yang tepat.
+  // Sudah disiapkan 8 kata kunci umum kiosk mall — silakan sesuaikan isinya.
+  // ==========================================
+  const dataMall = {
+    "toilet":  "Toilet terdekat berada di lantai ini, di sebelah kiri lorong utama.",
+    "makan":   "Area Food Court dengan berbagai jajanan Nusantara dan restoran berada di Lantai 4.",
+    "sakit":   "Klinik P3K terdekat berada di Lantai 1 dekat Lobby, dan juga tersedia di Lantai 3.",
+    "sholat":  "Silakan menuju Mushola utama yang berada di Lantai 5.",
+    "atm":     "ATM Center berada di lantai Basement, dekat akses lift utama.",
+    "parkir":  "Area parkir pengunjung berada di Basement 1 dan Basement 2, akses lift ada di dekat sini.",
+    "keluar":  "Pintu keluar terdekat berada di Lobby Utama, ikuti tanda hijau di langit-langit.",
+    "tolong":  "Pusat informasi dan Customer Service berada di Lobby Lantai 1. Silakan menuju ke sana untuk bantuan lebih lanjut."
+  };
+
+  const outputText  = document.getElementById('output-text');
+  const statusMic    = document.getElementById('status-mic');
+  const areaKamera   = document.getElementById('area-kamera');
+  const isiKamera    = document.getElementById('isi-kamera');
+  const btnAdmin     = document.getElementById('btn-admin');
+  const layarAdmin   = document.getElementById('layar-admin');
+
+  // ==========================================
+  // 0. CEK KONTEKS KEAMANAN (secure context)
+  // Kamera & mikrofon browser HANYA boleh aktif di:
+  // - https://...            (website yang sudah online)
+  // - http://localhost:...   (server lokal)
+  // TIDAK BOLEH di file:///... (buka file langsung dari komputer)
+  // ==========================================
+  const isSecureEnough = window.isSecureContext === true;
+  if (!isSecureEnough){
+    const pesanTidakAman = `<b>⚠️ File ini dibuka lewat "${location.protocol}"</b><br><br>
+      Kamera dan mikrofon browser hanya bisa diaktifkan lewat <b>https://</b> atau <b>http://localhost</b>, tidak bisa langsung dari file di komputer (${location.protocol}//...).<br><br>
+      Jalankan lewat server lokal (contoh: extension "Live Server" di VS Code, atau <code>python -m http.server</code>), atau upload ke hosting (Netlify/Vercel/GitHub Pages) untuk mengetesnya.`;
+    outputText.innerHTML = pesanTidakAman;
+  }
+
+  // ==========================================
+  // 3. LOGIKA UTAMA
+  // ==========================================
+  let sedangBicara = false;
+
+  function prosesInput(kataKunci){
+    if (sedangBicara) return;
+    kataKunci = (kataKunci || "").toLowerCase();
+    if (!kataKunci) return;
+
+    let responsDitemukan = false;
+    for (const [kunciDB, lokasi] of Object.entries(dataMall)){
+      if (kataKunci.includes(kunciDB)){
+        outputText.innerHTML = `Mencari: <b>${kunciDB.toUpperCase()}</b><br><br>${lokasi}`;
+        bicara(lokasi);
+        responsDitemukan = true;
+        break;
+      }
+    }
+
+    if (!responsDitemukan && !kataKunci.includes("netral")){
+      const maaf = "Maaf, saya menangkap isyarat atau suara, tapi kurang jelas. Anda mencari apa?";
+      outputText.textContent = maaf;
+      bicara(maaf);
+    }
+  }
+
+  function bicara(teks){
+    if (!('speechSynthesis' in window)) return;
+    try{
+      window.speechSynthesis.cancel();
+      sedangBicara = true;
+      const ucapan = new SpeechSynthesisUtterance(teks);
+      ucapan.lang = 'id-ID';
+      ucapan.rate = 0.95;
+      ucapan.onend = () => { sedangBicara = false; };
+      ucapan.onerror = () => { sedangBicara = false; };
+      window.speechSynthesis.speak(ucapan);
+    }catch(e){
+      console.warn("Text-to-speech gagal:", e);
+      sedangBicara = false;
+    }
+  }
+
+  // ==========================================
+  // 4. MODUL SUARA (Web Speech API) — dibungkus try/catch
+  // supaya kalau tidak didukung, TOMBOL LAIN TETAP BERFUNGSI
+  // ==========================================
+  let recognition = null;
+  let alasanSuaraGagal = "";
+
+  function initSuara(){
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI){
+      alasanSuaraGagal = "Browser ini tidak punya Web Speech API sama sekali (biasanya terjadi di Firefox, atau Safari versi lama). Coba buka dengan Chrome atau Edge terbaru.";
+      return false;
+    }
+    try{
+      recognition = new SpeechRecognitionAPI();
+      recognition.lang = 'id-ID';
+      recognition.continuous = true;
+      recognition.interimResults = false;
+
+      recognition.onresult = (event) => {
+        const hasilSuara = event.results[event.results.length - 1][0].transcript;
+        prosesInput(hasilSuara);
+      };
+      recognition.onerror = (e) => {
+        console.warn("Speech recognition error:", e.error);
+        const peta = {
+          "not-allowed": "Izin mikrofon ditolak. Klik ikon gembok/kamera di address bar browser lalu izinkan mikrofon.",
+          "service-not-allowed": "Layanan pengenalan suara diblokir (sering terjadi kalau halaman dibuka lewat file:// atau di dalam iframe tanpa izin mikrofon).",
+          "no-speech": null, // ini normal, tidak perlu ditampilkan sebagai error
+          "network": "Koneksi internet bermasalah — pengenalan suara Chrome butuh koneksi ke server Google."
+        };
+        const pesan = peta[e.error];
+        if (pesan){
+          statusMic.innerHTML = "⚠️ " + pesan;
+        }
+      };
+      recognition.onend = () => {
+        try{ recognition.start(); }catch(e){ /* diamkan, akan retry saat next tap jika perlu */ }
+      };
+      return true;
+    }catch(e){
+      alasanSuaraGagal = "Gagal membuat objek speech recognition: " + (e.message || e.name || e);
+      recognition = null;
+      return false;
+    }
+  }
+
+  function mulaiDengarkan(){
+    if (!recognition){
+      const ok = initSuara();
+      if (!ok){
+        statusMic.innerHTML = "⚠️ Mode suara tidak aktif: " + alasanSuaraGagal;
+        statusMic.style.display = "flex";
+        return;
+      }
+    }
+    try{
+      recognition.start();
+      statusMic.style.display = "flex";
+    }catch(e){
+      // sudah berjalan / butuh izin mic — biarkan, tidak menghentikan script lain
+      console.warn("recognition.start() gagal:", e);
+    }
+  }
+
+  // ==========================================
+  // 5. MODUL BAHASA ISYARAT (Teachable Machine)
+  // ==========================================
+  let model, webcam, maxPredictions;
+  let kameraAktif = false;
+  let cooldownIsyarat = false;
+
+  async function initKamera(){
+    if (!window.isSecureContext){
+      throw new Error(`Halaman dibuka lewat "${location.protocol}" — kamera browser hanya boleh aktif lewat https:// atau http://localhost. Jalankan lewat server lokal atau hosting online.`);
+    }
+    if (typeof tmImage === "undefined"){
+      throw new Error("Library Teachable Machine (tmImage) belum termuat — cek koneksi internet, atau CDN diblokir oleh jaringan/browser.");
+    }
+    if (!URL_MODEL_AI || !URL_MODEL_AI.startsWith("http")){
+      throw new Error("Link URL_MODEL_AI kosong atau tidak valid. Isi dengan link model Teachable Machine kamu.");
+    }
+
+    const modelURL    = URL_MODEL_AI + "model.json";
+    const metadataURL = URL_MODEL_AI + "metadata.json";
+
+    try{
+      model = await tmImage.load(modelURL, metadataURL);
+    }catch(e){
+      throw new Error("Gagal memuat model dari Teachable Machine. Pastikan link model sudah benar, project sudah di-'Export'/publish, dan diakhiri tanda '/'. Detail: " + (e.message || e));
+    }
+    maxPredictions = model.getTotalClasses();
+
+    // Minta izin kamera secara eksplisit dulu supaya pesan errornya jelas
+    try{
+      const testStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      testStream.getTracks().forEach(t => t.stop());
+    }catch(e){
+      const namaError = e.name || "";
+      if (namaError === "NotAllowedError" || namaError === "PermissionDeniedError"){
+        throw new Error("Izin kamera ditolak. Klik ikon gembok di address bar browser, izinkan akses kamera, lalu coba lagi.");
+      }
+      if (namaError === "NotFoundError"){
+        throw new Error("Tidak ada kamera terdeteksi di perangkat ini.");
+      }
+      if (namaError === "NotReadableError"){
+        throw new Error("Kamera sedang dipakai aplikasi lain. Tutup aplikasi/tab lain yang memakai kamera, lalu coba lagi.");
+      }
+      throw new Error("Gagal mengakses kamera: " + (e.message || namaError || e));
+    }
+
+    webcam = new tmImage.Webcam(220, 170, true);
+    await webcam.setup();
+    await webcam.play();
+    window.requestAnimationFrame(loopIsyarat);
+
+    areaKamera.appendChild(webcam.canvas);
+    webcam.canvas.style.display = "block";
+    isiKamera.style.display = "none";
+  }
+
+  async function loopIsyarat(){
+    if (!kameraAktif) return;
+    try{
+      webcam.update();
+      await deteksiIsyarat();
+    }catch(e){
+      console.warn("Loop deteksi isyarat berhenti:", e);
+      return;
+    }
+    window.requestAnimationFrame(loopIsyarat);
+  }
+
+  async function deteksiIsyarat(){
+    if (cooldownIsyarat) return;
+    const prediction = await model.predict(webcam.canvas);
+
+    for (let i = 0; i < maxPredictions; i++){
+      if (prediction[i].probability > 0.90){
+        const kelasTerdeteksi = prediction[i].className.toLowerCase();
+        if (kelasTerdeteksi !== "netral"){
+          prosesInput(kelasTerdeteksi);
+          cooldownIsyarat = true;
+          outputText.innerHTML += `<br><br><small>(Kamera jeda 6 detik agar tidak mendeteksi isyarat berulang…)</small>`;
+          setTimeout(() => { cooldownIsyarat = false; }, 6000);
+        }
+      }
+    }
+  }
+
+  function aktifkanKamera(){
+    if (kameraAktif) return;
+    outputText.innerHTML = "<b>Menghidupkan modul kamera AI…</b><br>Tunggu sebentar, sedang memuat model bahasa isyarat.";
+    initKamera().then(() => {
+      kameraAktif = true;
+      outputText.innerHTML = "<b>Mode bahasa isyarat aktif!</b><br><br>Silakan peragakan isyarat ke kamera (toilet, makan, sholat, atm, dll).";
+    }).catch((err) => {
+      outputText.innerHTML = `<b>Kamera tidak dapat diaktifkan.</b><br><br>${err.message || err}`;
+      console.error(err);
+    });
+  }
+
+  // ==========================================
+  // 6. EVENT LISTENERS — dipasang langsung, tidak bergantung
+  // pada berhasil/gagalnya modul suara atau kamera
+  // ==========================================
+  areaKamera.addEventListener('click', aktifkanKamera);
+  areaKamera.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' '){
+      e.preventDefault();
+      aktifkanKamera();
+    }
+  });
+
+  btnAdmin.addEventListener('click', () => {
+    layarAdmin.style.display = 'none';
+    bicara("Sistem Kiosk siap melayani pengunjung. Gunakan suara atau ketuk kotak kanan bawah untuk bahasa isyarat.");
+    mulaiDengarkan();
+  });
+
+})();
+</script>
+</body>
+</html>
